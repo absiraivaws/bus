@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { prisma } from '@/lib/prisma';
 import SeatTemplateManager from './template-manager';
 import { createSeatTemplate, deleteSeatTemplate } from './actions';
