@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String    @id @default(uuid())
+  email    String    @unique
+  name     String?
+  role     String    @default("USER") // USER, OPERATOR, ADMIN
+  vehicles Vehicle[]
+  bookings Booking[]
+}
+
+model SeatTemplate {
+  id          String @id @default(uuid())
+  name        String // e.g. "Standard 2+2", "Luxury 2+1"
+  columns     Int    @default(4)
+  rows        Int    @default(13)
+  seatLayout  String // JSON string with seat configuration
+  totalSeats  Int
+  createdAt   DateTime @default(now())
+}
+
+model Location {
+  id               String  @id @default(uuid())
+  name             String
+  district         String
+  routesStartingAt Route[] @relation("RouteStart")
+  routesEndingAt   Route[] @relation("RouteEnd")
+}
+
+model Vehicle {
+  id               String   @id @default(uuid())
+  ownerId          String
+  owner            User     @relation(fields: [ownerId], references: [id])
+  type             String   // Enum: Bus, Van, Car, Special Van
+  plateNumber      String
+  totalSeats       Int
+  columns          Int      @default(4)
+  rows             Int      @default(10)
+  lastRowSeats     Int      @default(5)
+  seatLayout       String?  // JSON string (Optional, can store custom layout if needed)
+  windowSeats      String?  // JSON string (Array of seat numbers/indices)
+  amenities        String?  // JSON string or comma separated
+  operatorName     String?
+  operatorWhatsapp String?
+  trips            Trip[]
+}
+
+model Route {
+  id                String   @id @default(uuid())
+  startLocationId   String
+  startLocation     Location @relation("RouteStart", fields: [startLocationId], references: [id])
+  endLocationId     String
+  endLocation       Location @relation("RouteEnd", fields: [endLocationId], references: [id])
+  stops             String?  // JSON list of intermediate cities
+  estimatedDuration Int      // Minutes
+  trips             Trip[]
+}
+
+model Trip {
+  id             String    @id @default(uuid())
+  vehicleId      String
+  vehicle        Vehicle   @relation(fields: [vehicleId], references: [id])
+  routeId        String
+  route          Route     @relation(fields: [routeId], references: [id])
+  date           DateTime
+  departureTime  String    // 24h format e.g. "14:30"
+  arrivalTime    String    // 24h format
+  pricePerSeat   Float
+  availableSeats Int
+  status         String    // Enum: Scheduled, Boarding, Completed, Cancelled
+  blockedSeats   String?   // JSON string (Array of seat numbers blocked by operator)
+  bookings       Booking[]
+}
+
+model Booking {
+  id            String   @id @default(uuid())
+  tripId        String
+  trip          Trip     @relation(fields: [tripId], references: [id])
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  seatNumbers   String   // JSON array e.g. ["A1", "A2"]
+  totalAmount   Float
+  pickupPoint   String
+  dropPoint     String
+  paymentStatus String   // Enum: Pending, Paid, Failed
+  paymentId     String?
+  createdAt     DateTime @default(now())
+}
