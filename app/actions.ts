@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 
 export async function createBooking(formData: FormData) {
     const tripId = formData.get('tripId') as string;
+    const seatNumbers = formData.get('seatNumbers') as string; // Comma-separated seat labels
     const seatCount = parseInt(formData.get('seatCount') as string);
     const pickupPoint = formData.get('pickupPoint') as string;
     const dropPoint = formData.get('dropPoint') as string;
@@ -12,7 +13,9 @@ export async function createBooking(formData: FormData) {
     const passengerEmail = formData.get('passengerEmail') as string;
     const pricePerSeat = parseFloat(formData.get('pricePerSeat') as string);
 
-    const totalAmount = seatCount * pricePerSeat;
+    const CONVENIENCE_FEE = 50;
+    const subtotal = seatCount * pricePerSeat;
+    const totalAmount = subtotal + CONVENIENCE_FEE;
 
     // Create User if not exists (Passenger)
     let user = await prisma.user.findUnique({ where: { email: passengerEmail } });
@@ -26,9 +29,6 @@ export async function createBooking(formData: FormData) {
         });
     }
 
-    // Generate seat numbers (Mock)
-    const seatNumbers = Array.from({ length: seatCount }, (_, i) => `Seat ${i + 1}`).join(',');
-
     // Check booking time restriction (30 mins before departure)
     const trip = await prisma.trip.findUnique({ where: { id: tripId } });
     if (!trip) throw new Error("Trip not found");
@@ -39,6 +39,26 @@ export async function createBooking(formData: FormData) {
 
     if (diffMinutes < 30) {
         throw new Error("Cannot book seats less than 30 minutes before departure.");
+    }
+
+    // Check if seats are already booked
+    const existingBookings = await prisma.booking.findMany({
+        where: {
+            tripId,
+            paymentStatus: { in: ['Paid', 'Pending'] }
+        }
+    });
+
+    const bookedSeats = new Set<string>();
+    existingBookings.forEach(booking => {
+        booking.seatNumbers.split(',').forEach(seat => bookedSeats.add(seat.trim()));
+    });
+
+    const requestedSeats = seatNumbers.split(',').map(s => s.trim());
+    const conflictingSeats = requestedSeats.filter(seat => bookedSeats.has(seat));
+
+    if (conflictingSeats.length > 0) {
+        throw new Error(`Seats ${conflictingSeats.join(', ')} are already booked. Please select different seats.`);
     }
 
     const booking = await prisma.booking.create({

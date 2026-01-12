@@ -2,8 +2,24 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { writeFile } from 'fs/promises';
+import path from 'path';
 
 // --- Vehicles ---
+
+async function saveImage(image: File | null, index: number, vehicleId: string): Promise<string | null> {
+    if (!image || image.size === 0) return null;
+
+    const bytes = await image.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    const ext = image.name.split('.').pop() || 'jpg';
+    const filename = `${vehicleId}_${index}_${Date.now()}.${ext}`;
+    const filepath = path.join(process.cwd(), 'public', 'vehicles', filename);
+
+    await writeFile(filepath, buffer);
+    return `/vehicles/${filename}`;
+}
 
 export async function createVehicle(formData: FormData) {
     const plateNumber = formData.get('plateNumber') as string;
@@ -16,6 +32,7 @@ export async function createVehicle(formData: FormData) {
     const operatorWhatsapp = formData.get('operatorWhatsapp') as string;
     const seatLayout = formData.get('seatLayout') as string; // JSON string
     const totalSeats = parseInt(formData.get('totalSeats') as string);
+    const scheduleType = formData.get('scheduleType') as string || 'Random';
 
     let user = await prisma.user.findFirst({ where: { role: 'OPERATOR' } });
     if (!user) {
@@ -28,20 +45,91 @@ export async function createVehicle(formData: FormData) {
         });
     }
 
-    await prisma.vehicle.create({
+    // Create vehicle first to get ID
+    const vehicle = await prisma.vehicle.create({
         data: {
             plateNumber,
             type,
             totalSeats,
             columns,
             rows,
-            lastRowSeats: 0, // Deprecated/Unused with custom layout
-            windowSeats: '', // Deprecated, stored in seatLayout now
+            lastRowSeats: 0,
+            windowSeats: '',
             seatLayout,
             amenities,
             operatorName,
             operatorWhatsapp,
+            scheduleType,
             ownerId: user.id
+        }
+    });
+
+    // Handle image uploads
+    const image1 = formData.get('image1') as File | null;
+    const image2 = formData.get('image2') as File | null;
+    const image3 = formData.get('image3') as File | null;
+
+    const image1Path = await saveImage(image1, 1, vehicle.id);
+    const image2Path = await saveImage(image2, 2, vehicle.id);
+    const image3Path = await saveImage(image3, 3, vehicle.id);
+
+    // Update vehicle with image paths
+    if (image1Path || image2Path || image3Path) {
+        await prisma.vehicle.update({
+            where: { id: vehicle.id },
+            data: {
+                image1: image1Path,
+                image2: image2Path,
+                image3: image3Path
+            }
+        });
+    }
+
+    revalidatePath('/operator/vehicles');
+}
+
+export async function updateVehicle(formData: FormData) {
+    const id = formData.get('id') as string;
+    const plateNumber = formData.get('plateNumber') as string;
+    const type = formData.get('type') as string;
+    const columns = parseInt(formData.get('columns') as string);
+    const rows = parseInt(formData.get('rows') as string);
+    const amenities = formData.get('amenities') as string;
+    const operatorName = formData.get('operatorName') as string;
+    const operatorWhatsapp = formData.get('operatorWhatsapp') as string;
+    const seatLayout = formData.get('seatLayout') as string;
+    const totalSeats = parseInt(formData.get('totalSeats') as string);
+    const scheduleType = formData.get('scheduleType') as string || 'Random';
+
+    // Get existing vehicle to preserve images if not updated
+    const existingVehicle = await prisma.vehicle.findUnique({ where: { id } });
+    if (!existingVehicle) throw new Error('Vehicle not found');
+
+    // Handle image uploads
+    const image1 = formData.get('image1') as File | null;
+    const image2 = formData.get('image2') as File | null;
+    const image3 = formData.get('image3') as File | null;
+
+    const image1Path = await saveImage(image1, 1, id) || existingVehicle.image1;
+    const image2Path = await saveImage(image2, 2, id) || existingVehicle.image2;
+    const image3Path = await saveImage(image3, 3, id) || existingVehicle.image3;
+
+    await prisma.vehicle.update({
+        where: { id },
+        data: {
+            plateNumber,
+            type,
+            totalSeats,
+            columns,
+            rows,
+            seatLayout,
+            amenities,
+            operatorName,
+            operatorWhatsapp,
+            scheduleType,
+            image1: image1Path,
+            image2: image2Path,
+            image3: image3Path
         }
     });
 
@@ -57,10 +145,20 @@ export async function deleteVehicle(id: string) {
 
 export async function createLocation(formData: FormData) {
     const name = formData.get('name') as string;
-    const district = formData.get('district') as string;
 
     await prisma.location.create({
-        data: { name, district }
+        data: { name }
+    });
+    revalidatePath('/operator/routes');
+}
+
+export async function updateLocation(formData: FormData) {
+    const id = formData.get('id') as string;
+    const name = formData.get('name') as string;
+
+    await prisma.location.update({
+        where: { id },
+        data: { name }
     });
     revalidatePath('/operator/routes');
 }
@@ -93,6 +191,25 @@ export async function createRoute(formData: FormData) {
     revalidatePath('/operator/routes');
 }
 
+export async function updateRoute(formData: FormData) {
+    const id = formData.get('id') as string;
+    const startLocationId = formData.get('startLocationId') as string;
+    const endLocationId = formData.get('endLocationId') as string;
+    const estimatedDuration = parseInt(formData.get('estimatedDuration') as string);
+    const stops = formData.get('stops') as string;
+
+    await prisma.route.update({
+        where: { id },
+        data: {
+            startLocationId,
+            endLocationId,
+            estimatedDuration,
+            stops
+        }
+    });
+    revalidatePath('/operator/routes');
+}
+
 export async function deleteRoute(id: string) {
     await prisma.route.delete({ where: { id } });
     revalidatePath('/operator/routes');
@@ -106,6 +223,7 @@ export async function createTrip(formData: FormData) {
     const dateStr = formData.get('date') as string;
     const departureTime = formData.get('departureTime') as string;
     const pricePerSeat = parseFloat(formData.get('pricePerSeat') as string);
+    const bookingWindowDays = parseInt(formData.get('bookingWindowDays') as string) || 30;
 
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) throw new Error("Vehicle not found");
@@ -122,16 +240,6 @@ export async function createTrip(formData: FormData) {
 
     const tripDate = new Date(dateStr);
 
-    // Logic: "when operator add the route it's available next 5 days"
-    // If vehicle is Bus or Van, we might want to create 5 trips?
-    // Or just create the one requested. The requirement is a bit vague.
-    // "when operator add the route it's available next 5 days" -> This sounds like if I add a route, it should auto-schedule?
-    // But this is the "Schedule Trip" action, not "Create Route".
-    // Let's assume the user wants to schedule this trip for the next 5 days starting from the selected date.
-    // But "Bus, van only" for cancellation policy.
-    // Let's stick to creating 1 trip for now to avoid spamming, but I'll add a comment.
-    // Actually, let's just create the single trip as requested.
-
     await prisma.trip.create({
         data: {
             vehicleId,
@@ -141,6 +249,7 @@ export async function createTrip(formData: FormData) {
             arrivalTime,
             pricePerSeat,
             availableSeats: vehicle.totalSeats,
+            bookingWindowDays: Math.min(Math.max(bookingWindowDays, 0), 90), // Clamp between 0-90
             status: "Scheduled"
         }
     });
@@ -149,22 +258,53 @@ export async function createTrip(formData: FormData) {
 }
 
 export async function deleteTrip(id: string) {
-    const trip = await prisma.trip.findUnique({ where: { id }, include: { vehicle: true } });
+    const trip = await prisma.trip.findUnique({
+        where: { id },
+        include: {
+            vehicle: true,
+            bookings: {
+                include: {
+                    user: true
+                }
+            }
+        }
+    });
+
     if (!trip) return;
 
-    // Cancellation Policy: Bus/Van can only cancel before 2 days
-    if (['Bus', 'Van'].includes(trip.vehicle.type)) {
-        const now = new Date();
-        const tripDate = new Date(trip.date);
-        const diffTime = tripDate.getTime() - now.getTime();
-        const diffDays = diffTime / (1000 * 3600 * 24);
+    // Cancellation Policy: Must cancel at least 1 day (24 hours) before departure
+    const now = new Date();
+    const tripDateTime = new Date(`${trip.date.toISOString().split('T')[0]}T${trip.departureTime}`);
+    const diffTime = tripDateTime.getTime() - now.getTime();
+    const diffHours = diffTime / (1000 * 3600);
 
-        if (diffDays < 2) {
-            throw new Error("Cannot cancel Bus/Van trips less than 2 days before departure.");
-        }
+    if (diffHours < 24) {
+        throw new Error("Cannot cancel trips less than 24 hours before departure.");
     }
 
-    await prisma.trip.delete({ where: { id } });
+    // Get all booked passengers for notification
+    const passengers = trip.bookings.map(booking => ({
+        email: booking.user.email,
+        name: booking.user.name,
+        seatNumbers: booking.seatNumbers
+    }));
+
+    // Update status to "Cancelled by Operator" instead of deleting
+    await prisma.trip.update({
+        where: { id },
+        data: { status: "Cancelled by Operator" }
+    });
+
+    // Send notifications (placeholder - in production, integrate with email/WhatsApp API)
+    if (passengers.length > 0) {
+        console.log(`[NOTIFICATION] Trip cancelled. Notifying ${passengers.length} passenger(s):`);
+        passengers.forEach(passenger => {
+            console.log(`  - Email to ${passenger.email}: Trip on ${trip.date.toLocaleDateString()} at ${trip.departureTime} has been cancelled.`);
+            // TODO: Integrate with email service (e.g., SendGrid, AWS SES)
+            // TODO: Integrate with WhatsApp Business API
+        });
+    }
+
     revalidatePath('/operator/trips');
 }
 

@@ -49,7 +49,7 @@ export default function SeatTemplateManager({
             isWindow: false
         });
 
-        // Create seat grid
+        // Create seat grid - default to 'seat' type
         let seatCount = 1;
         for (let r = 1; r <= rows; r++) {
             for (let c = 0; c < columns; c++) {
@@ -57,9 +57,9 @@ export default function SeatTemplateManager({
                     id: `${r}-${c}`,
                     row: r,
                     col: c,
-                    type: 'empty',
+                    type: 'seat',
                     label: seatCount.toString().padStart(2, '0'),
-                    isWindow: c === 0 || c === columns - 1
+                    isWindow: false
                 });
                 seatCount++;
             }
@@ -92,10 +92,20 @@ export default function SeatTemplateManager({
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
         const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
 
+        // Position popup near the clicked seat (to the right if space, otherwise left)
+        const viewportWidth = window.innerWidth;
+        const popupWidth = 250; // Approximate popup width
+        let leftPosition = rect.right + scrollLeft + 10;
+
+        // If popup would go off screen, position it to the left
+        if (leftPosition + popupWidth > viewportWidth) {
+            leftPosition = rect.left + scrollLeft - popupWidth - 10;
+        }
+
         setSelectedSlot(slotId);
         setPopupPosition({
-            top: rect.bottom + scrollTop + 5,
-            left: rect.left + scrollLeft
+            top: rect.top + scrollTop,
+            left: Math.max(10, leftPosition) // Ensure minimum 10px from left edge
         });
     };
 
@@ -248,7 +258,6 @@ export default function SeatTemplateManager({
                         }}>
                             {slots.sort((a, b) => (a.row - b.row) || (a.col - b.col)).map((slot) => {
                                 const isSelected = selectedSlot === slot.id;
-                                const isFirstRow = slot.row === 1;
 
                                 return (
                                     <div
@@ -259,8 +268,7 @@ export default function SeatTemplateManager({
                                             background: slot.type === 'empty' ? 'transparent' :
                                                 (slot.type === 'driver' ? '#333' :
                                                     (slot.isWindow ? 'var(--secondary)' : 'var(--surface)')),
-                                            border: slot.type === 'empty' ? '1px dashed var(--border)' :
-                                                (isFirstRow && slot.type === 'seat' ? '2px solid var(--accent)' : '1px solid var(--border)'),
+                                            border: slot.type === 'empty' ? '1px dashed var(--border)' : '1px solid var(--border)',
                                             borderRadius: '8px',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -458,7 +466,11 @@ export default function SeatTemplateManager({
                                             type="button"
                                             className="btn"
                                             style={{ fontSize: '0.85rem', padding: '6px 12px', background: 'var(--error)' }}
-                                            onClick={() => onDelete(template.id)}
+                                            onClick={() => {
+                                                if (confirm(`Are you sure you want to delete "${template.name}"? This action cannot be undone.`)) {
+                                                    onDelete(template.id);
+                                                }
+                                            }}
                                         >
                                             Delete
                                         </button>

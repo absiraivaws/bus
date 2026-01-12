@@ -1,5 +1,25 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import Image from 'next/image';
+
+type Trip = {
+    id: string;
+    departureTime: string;
+    arrivalTime: string;
+    pricePerSeat: number;
+    availableSeats: number;
+    vehicle: {
+        type: string;
+        amenities: string | null;
+        image1: string | null;
+        plateNumber: string;
+    };
+    route: {
+        estimatedDuration: number;
+        startLocation: { name: string };
+        endLocation: { name: string };
+    };
+};
 
 export default async function SearchPage({
     searchParams,
@@ -47,8 +67,20 @@ export default async function SearchPage({
             </header>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {trips.map((trip: any) => (
-                    <div key={trip.id} className="glass card" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr 1fr', alignItems: 'center', gap: '20px' }}>
+                {trips.map((trip: Trip) => (
+                    <div key={trip.id} className="glass card" style={{ display: 'grid', gridTemplateColumns: trip.vehicle.image1 ? '200px 1fr 150px 150px' : '1fr 2fr 1fr 1fr', alignItems: 'center', gap: '20px' }}>
+                        {/* Vehicle Image */}
+                        {trip.vehicle.image1 && (
+                            <div style={{ position: 'relative', height: '150px', borderRadius: '12px', overflow: 'hidden' }}>
+                                <Image
+                                    src={trip.vehicle.image1}
+                                    alt={trip.vehicle.plateNumber}
+                                    fill
+                                    style={{ objectFit: 'cover' }}
+                                />
+                            </div>
+                        )}
+
                         {/* Time */}
                         <div>
                             <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{trip.departureTime}</div>

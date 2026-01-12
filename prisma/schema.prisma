@@ -29,7 +29,7 @@ model SeatTemplate {
 model Location {
   id               String  @id @default(uuid())
   name             String
-  district         String
+  district         String? // Optional - being phased out
   routesStartingAt Route[] @relation("RouteStart")
   routesEndingAt   Route[] @relation("RouteEnd")
 }
@@ -49,6 +49,10 @@ model Vehicle {
   amenities        String?  // JSON string or comma separated
   operatorName     String?
   operatorWhatsapp String?
+  image1           String?  // Path to first vehicle image
+  image2           String?  // Path to second vehicle image
+  image3           String?  // Path to third vehicle image
+  scheduleType     String   @default("Random") // "Daily" or "Random"
   trips            Trip[]
 }
 
@@ -64,19 +68,20 @@ model Route {
 }
 
 model Trip {
-  id             String    @id @default(uuid())
-  vehicleId      String
-  vehicle        Vehicle   @relation(fields: [vehicleId], references: [id])
-  routeId        String
-  route          Route     @relation(fields: [routeId], references: [id])
-  date           DateTime
-  departureTime  String    // 24h format e.g. "14:30"
-  arrivalTime    String    // 24h format
-  pricePerSeat   Float
-  availableSeats Int
-  status         String    // Enum: Scheduled, Boarding, Completed, Cancelled
-  blockedSeats   String?   // JSON string (Array of seat numbers blocked by operator)
-  bookings       Booking[]
+  id                String    @id @default(uuid())
+  vehicleId         String
+  vehicle           Vehicle   @relation(fields: [vehicleId], references: [id])
+  routeId           String
+  route             Route     @relation(fields: [routeId], references: [id])
+  date              DateTime
+  departureTime     String    // 24h format e.g. "14:30"
+  arrivalTime       String    // 24h format
+  pricePerSeat      Float
+  availableSeats    Int
+  bookingWindowDays Int       @default(30) // How many days in advance passengers can book (0-90)
+  status            String    // Enum: Scheduled, Boarding, Completed, Cancelled
+  blockedSeats      String?   // JSON string (Array of seat numbers blocked by operator)
+  bookings          Booking[]
 }
 
 model Booking {

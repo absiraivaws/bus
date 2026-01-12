@@ -3,6 +3,12 @@ export const dynamic = 'force-dynamic';
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 
+type Location = {
+  id: string;
+  name: string;
+  district: string;
+};
+
 export default async function Home() {
   const locations = await prisma.location.findMany({ orderBy: { name: 'asc' } });
 
@@ -34,14 +40,14 @@ export default async function Home() {
               <label className="label">From</label>
               <select name="from" className="input" required>
                 <option value="">Select Origin</option>
-                {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                {locations.map((loc: Location) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
               </select>
             </div>
             <div style={{ textAlign: 'left' }}>
               <label className="label">To</label>
               <select name="to" className="input" required>
                 <option value="">Select Destination</option>
-                {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                {locations.map((loc: Location) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
               </select>
             </div>
             <div style={{ textAlign: 'left' }}>
